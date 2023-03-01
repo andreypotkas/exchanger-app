@@ -7,126 +7,101 @@ import { ColumnGroup } from 'primereact/columngroup';
 import { Row } from 'primereact/row';
 import './Rates.scss';
 
-import BTC from '../../assets/BTC.png';
-import AAVE from '../../assets/AAVE.png';
-import ADA from '../../assets/ADA.png';
-import BNB from '../../assets/BNB.png';
-import DOGE from '../../assets/DOGE.png';
-import ETH from '../../assets/ETH.png';
-import HBAR from '../../assets/HBAR.png';
-import LTC from '../../assets/LTC.png';
-import MATIC from '../../assets/MATIC.png';
-import SOL from '../../assets/SOL.png';
-import XRP from '../../assets/XRP.png';
+
 import { connectCoinbaseWebSocket } from '../../services/coinbase';
 import { connectBinanceWebSocket } from '../../services/binance';
-
-interface ColumnMeta {
-    field: string;
-    header: string;
-}
+import { setCoinImage } from '../../utils/setCoinImage';
 
 const cryptocurrencies: any[] = ['BTC', 'ETH', 'XRP', 'SOL', 'MATIC', 'BNB', 'DOGE', 'LTC', 'ADA', 'HBAR', 'AAVE'];
-const initRateItem = { BTC_USD:'', ETH_USD:'', XRP_USD:'', SOL_USD:'', MATIC_USD: '', BNB_USD:'', DOGE_USD:'', LTC_USD: '', ADA_USD: '', HBAR_USD: '', ETH_BTC: '', XRP_BTC:'', SOL_BTC:'', MATIC_BTC: '', BNB_BTC:'', DOGE_BTC:'', LTC_BTC: '', ADA_BTC: '', HBAR_BTC: '', BTC_ETH: '', XRP_ETH:'', SOL_ETH:'', MATIC_ETH: '', BNB_ETH:'', DOGE_ETH:'', LTC_ETH: '', ADA_ETH: '', HBAR_ETH: ''};
+const exchangers: any[] = ['KRAKEN', 'BINANCE', 'COINBASE'];
+
+const store: any = {};
+cryptocurrencies.forEach(item => {
+    exchangers.forEach(exchanger => {
+        store[item + '_' + exchanger + '_USD'] = '';
+    })
+})
+
 
 export default function Rates() {
-    const columns: ColumnMeta[] = cryptocurrencies.map(item => {return { header: item, field: item + '_USD' }});
-    const [visibleColumns, setVisibleColumns] = useState<any[]>(columns.slice(0, 6));
-    const [visibleColumns2, setVisibleColumns2] = useState<any[]>([]);
+    const [state, setState] = useState(store);
 
-    useEffect(() => {
-    
-    }, [visibleColumns])
+    const columns = [
+        { field: 'KRAKEN', header: 'Kraken' },
+        { field: 'COINBASE', header: 'Coinbase',  },
+        { field: 'BINANCE', header: 'Binance', }
+    ];
 
-    // Util
-    const setImg = (prop: string) => {
-        let img;
-        switch(prop){
-            case 'BTC': img = BTC; break;
-            case 'AAVE': img = AAVE; break;
-            case 'BNB': img = BNB; break;
-            case 'ETH': img = ETH; break;
-            case 'DOGE': img = DOGE; break;
-            case 'HBAR': img = HBAR; break;
-            case 'LTC': img = LTC; break;
-            case 'MATIC': img = MATIC; break;
-            case 'SOL': img = SOL; break;
-            case 'XRP': img = XRP; break;
-            case 'ADA': img = ADA; break;
-        }
-        return img;
-    }
-    
-    // Exchangers
-    const [krakenRates, setKrakenRates] = useState({label: { name:'Kraken', color: 'violet'}, ...initRateItem} as any);
-    const [coinbaseRates, setCoinbaseRates] = useState({label: { name:'Coinbase', color: 'violet'}, ...initRateItem} as any);
-    const [binanceRates, setbinanceRates] = useState({label: { name:'Binance', color: 'violet'}, ...initRateItem} as any);
+    const [visibleColumns, setVisibleColumns] = useState<any[]>(columns);    
 
     // Init websocket connections
     useEffect(() => {
         const kraken = connectKrakenWebSocket();
         const coinbase = connectCoinbaseWebSocket();
         const binance = connectBinanceWebSocket();
+
         coinbase.onmessage = (message) => {
-            const data = JSON.parse(message.data);  
-            
-            const prop = data.product_id?.replace('-', '_');                        
-            coinbaseRates[prop] = {price: data.price, volume: data.volume_24h}
-            setCoinbaseRates({...coinbaseRates, [prop]: {price: data.price, volume: data.volume_24h}})
+            const data = JSON.parse(message.data);              
+            const prop = data.product_id?.split('-')[0] as any;
+            state[prop + '_COINBASE' + '_USD'] = data.price;
+            setState({...state});
         }
+
         kraken.onmessage = (message) => {
             const data = JSON.parse(message.data);
       
             if (data[2] === 'ticker'){                    
-              const prop = data[3]?.replace('/', '_').replace('XBT', 'BTC');            
-              krakenRates[prop] = { price: data[1].p[0], volume: data[1].v[1] }
-              setKrakenRates({...krakenRates})
+              const prop = data[3]?.split('/')[0].replace('XBT', 'BTC');            
+              state[prop + '_KRAKEN' + '_USD'] = data[1].p[0];
+              setState({...state});              
             }
         }
         binance.onmessage = (message) => {
             const data = JSON.parse(message.data);
-            const prop = data.s?.replace('USDT', '_USD');            
-            binanceRates[prop] = {price: data.c, volume: data.v};      
-            setbinanceRates({...binanceRates})
+            const prop = data.s?.split('USDT')[0];                        
+            state[prop + '_BINANCE' + '_USD'] = data.c;
+            setState({...state});
         }
     }, []);
 
     // Table header columns
     const headerGroup = <ColumnGroup>
                         <Row>
-                            <Column header="Currency" rowSpan={2} />
-                            {visibleColumns.map((col) => (
-                                <Column colSpan={2} key={col.field} field={col.field} header={col.header} />
-                            ))}
-                        </Row>
-                        <Row>
-                            {visibleColumns2.map((col: any, index: any) => (
-                                <Column key={col.field} field={col.field} header={index % 2 === 0 ? 'Price' : 'Volume'} />
-                            ))}
+                            <Column header="Currency" frozen />
+                            <Column header="Total coin amount" />
+                            { visibleColumns.map((col, index) => (
+                                <Column key={col.header + index} field={col.field} header={col.header} />
+                            )) }
                         </Row>
                     </ColumnGroup>;
 
     // Table column select header
-    const onColumnToggle = (event: MultiSelectChangeEvent) => {
+    const onColumnToggle = (event: any) => {
         let selectedColumns = event.value;
-        let orderedSelectedColumns = columns.filter((col) => selectedColumns.some((sCol: ColumnMeta) => sCol.field === col.field));
+        let orderedSelectedColumns = columns.filter((col) => selectedColumns.some((sCol: any) => sCol.field === col.field));
 
         setVisibleColumns(orderedSelectedColumns);
-        const x = [] as any;
-        orderedSelectedColumns.forEach((item) => {
-        x.push(item, item);
-    }, []);
-    setVisibleColumns2(x);
     };
     const header = <MultiSelect value={visibleColumns} options={columns} optionLabel="header" onChange={onColumnToggle} className="w-full sm:w-20rem" display="chip" />;
+    
+    const renderCurrencyTitle = (coin: string) => {
+        return (
+            <div className='flex gap-2 align-items-center'>
+                <img src={setCoinImage(coin)} alt="coin" width={30} height={30} />
+                <div>{coin}</div>
+            </div>
+        )
+        
+    }
 
     return (
         <div className="card">
-            <DataTable value={[krakenRates, coinbaseRates, binanceRates]} headerColumnGroup={headerGroup} header={header} tableStyle={{ minWidth: '50rem', maxWidth:'100%' }}>
-            <Column style={{minWidth:'100px', paddingLeft:'20px'}} body={(data) => data.label.name} />
-            {visibleColumns2.map((col: any, index: any) => (
-                                    <Column key={col.field + index} body={(data) => index % 2 === 0 ? data[col.field].price : data[col.field].volume}/>
-                            ))}
+            <DataTable value={cryptocurrencies} headerColumnGroup={headerGroup} header={header} tableStyle={{ minWidth: '50rem', maxWidth:'100%' }}>
+                <Column frozen body={ renderCurrencyTitle }/>
+                <Column body={ 100000 }/>
+                {visibleColumns.map((col: any, index: any) => (
+                    <Column key={col.header} field={col.field} body={(data) => state[data + '_' + col.field + '_USD'] }/>
+                ))}
             </DataTable>
         </div>
     );
